@@ -85,8 +85,7 @@ class BoggleSolver:
     def solve(self,trie):
         results = set()
 
-        ROWS = len(self.board)
-        COLS = len(self.board[0])
+        ROWS,COLS = self.board.shape
         
         for r in range(ROWS):
             for c in range(COLS):
@@ -98,10 +97,9 @@ class BoggleSolver:
         
     def dfs(self,r, c, node, word, visited, results):
         DIRS = [(-1,-1),(-1,0),(0,-1),(0,1),(1,0),(1,1),(-1,1),(1,-1)]
-        COLS = len(self.board[0])
-        ROWS = len(self.board)
+        ROWS,COLS = self.board.shape
         
-        letter = self.board[r][c]
+        letter = self.board[r,c]
         if letter not in node.children:
             return
     

@@ -6,24 +6,31 @@ Created on Sun Jul  5 18:46:15 2026
 
 """
 from pathlib import Path
-import cv2
+from auxiliary import load_image,show,timer,load_templates,make_bw
+from BoggleReader import (read_board,read_letter,
+                        get_board,get_dice,
+                        draw_lines,detect_cells,separate_dice)
 import numpy as np
-from matplotlib import pyplot as plt
-from statistic_tools import kde
-from scipy.signal import find_peaks
-from SeparateDice import get_board,get_dice,load_image,show,read_letter
 
-images = list(Path('TrainingImages').glob('*.jpg'))[1:2]
-for n,image in enumerate(images):
-    # try:
-        img = load_image(image)
-        img = get_board(img)  
-        # show(img)
-        dice = get_dice(img,tolerance=0.2)
-        # for d in dice:
-        #     show(d)
+paths = list(Path('TrainingImages').glob('*.jpg'))
+images = [load_image(path) for path in paths]
+templates = load_templates()
+# for template in templates.values():
+#     show(template)
 
-show(dice[0])
 
-letter = read_letter(dice[0])
-print(letter)
+#%%
+
+boards=[]
+for image in images[0:1]:
+    board = get_board(image)  
+    letters = read_board(board,templates)
+    if not isinstance(letters,np.ndarray):
+        continue
+    boards.append(letters)
+
+
+#%%
+
+# for n,image in enumerate(images):
+#     show(get_board(image),title=f'({len(boards[n])}) {boards[n]}')

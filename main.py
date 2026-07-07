@@ -8,27 +8,33 @@ import numpy as np
 from pathlib import Path
 import sys
 import pickle
-from utils import Trie,TrieNode,buildTrie,BoggleSolver
+from Dictionary.utils import Trie,TrieNode,buildTrie,BoggleSolver
+from BoardRecognizer.BoggleReader import read_board,get_board
+from BoardRecognizer.auxiliary import load_image,load_templates
 
-if str(Path(__file__).parent) not in sys.path:
-    sys.path.append(str(Path(__file__).parent))
-    
-from utils import buildTrie
 
-trie_file = Path(__file__).parent/'trie.pkl'
+trie_file = Path(__file__).parent/'Dictionary'/'trie.pkl'
 if not trie_file.exists():
     buildTrie()    
 with open(trie_file,'rb') as f:
     print('load trie')
     trie = pickle.load(f)    
 
+paths = list(Path('BoardRecognizer/TrainingImages').glob('*.jpg'))
+images = [load_image(path) for path in paths]
+templates = load_templates()
 
-Board = [['L','A','K','L'],
-         ['G','O','I','W'],
-         ['T','N','H','D'],
-         ['U','A','T','Qu']
-         ]
+#%%
+# board = [['L','A','K','L'],
+#          ['G','O','I','W'],
+#          ['T','N','H','D'],
+#          ['U','A','T','Qu']
+#          ]
 
-bs = BoggleSolver(Board)
+board = get_board(images[0]) 
+board = read_board(board,templates)
+bs = BoggleSolver(board)
+valid_words = bs.solve(trie)
 valid_words = [word for word in bs.solve(trie) if len(word)>3]
+print(valid_words)
     
