@@ -10,7 +10,7 @@ import sys
 import pickle
 from Dictionary.utils import Trie,TrieNode,buildTrie,BoggleSolver
 from BoardRecognizer.BoggleReader import read_board,get_board
-from BoardRecognizer.auxiliary import load_image,load_templates
+from BoardRecognizer.auxiliary import load_image,load_templates,show
 
 
 trie_file = Path(__file__).parent/'Dictionary'/'trie.pkl'
@@ -25,16 +25,16 @@ images = [load_image(path) for path in paths]
 templates = load_templates()
 
 #%%
-# board = [['L','A','K','L'],
-#          ['G','O','I','W'],
-#          ['T','N','H','D'],
-#          ['U','A','T','Qu']
-#          ]
+board = np.array([['T','T','F','R'],
+                    ['E','A','A','H'],
+                    ['H','Qu','R','D'],
+                    ['O','L','E','A']
+                    ])
 
-board = get_board(images[0]) 
-board = read_board(board,templates)
+# board = get_board(images[0]) 
+# board = read_board(board,templates)
 bs = BoggleSolver(board)
 valid_words = bs.solve(trie)
-valid_words = [word for word in bs.solve(trie) if len(word)>3]
+valid_words = [word for word in bs.solve(trie) if len(word)>=6]
 print(valid_words)
     

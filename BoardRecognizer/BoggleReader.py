@@ -156,10 +156,10 @@ def detect_cells(img,size_tolerance=0.7,square_tolerance=0.5,
         return (row, x)
     
     squares = sorted(squares, key=sort_key) # sort from top left to bottom right
-    # #debug square filtered contours:
-    # img_with_ctrs = img.copy()
-    # cv2.drawContours(img_with_ctrs, squares, -1, (0, 255, 0), 2)  
-    # show(img_with_ctrs,title=f'#squares:{len(squares)}')  
+    #debug square filtered contours:
+    img_with_ctrs = img.copy()
+    cv2.drawContours(img_with_ctrs, squares, -1, (0, 255, 0), 2)  
+    show(img_with_ctrs,title=f'#squares:{len(squares)}')  
     # print(len(squares))
     return squares
 
@@ -204,7 +204,7 @@ def get_dice(img,linekwargs={},cellkwargs={}):
     """this function takes an already cropped boggle board 
     and returns the dice as separate images"""
     img = draw_lines(img,**linekwargs)
-    # show(img)
+    show(img)
     cells = detect_cells(img,**cellkwargs)
     if len(cells)!=16:
         print(f'Got {len(cells)} instead of 16.')

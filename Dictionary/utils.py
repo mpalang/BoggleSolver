@@ -19,7 +19,7 @@ class Trie:
 
     def insert(self, word):
         node = self.root
-        for letter in word:
+        for n,letter in enumerate(word):
             node = node.children.setdefault(letter, TrieNode())
         node.is_word = True
         
@@ -30,6 +30,7 @@ class Trie:
             if letter not in node.children:
                 return False
             node = node.children[letter]
+
         return node.is_word
     
     def is_prefix(self, prefix):
@@ -63,7 +64,7 @@ class Trie:
         
 def buildTrie():
     print('loading words')
-    with open(Path(__file__).parent/'words_180k.txt') as words_file:
+    with open(Path(Path(__file__).parent/'words_180k.txt')) as words_file:
         valid_words = set(words_file.read().upper().split())
     
     print('bulding trie')
@@ -99,15 +100,26 @@ class BoggleSolver:
         DIRS = [(-1,-1),(-1,0),(0,-1),(0,1),(1,0),(1,1),(-1,1),(1,-1)]
         ROWS,COLS = self.board.shape
         
-        letter = self.board[r,c]
-        if letter not in node.children:
-            return
-    
-        node = node.children[letter]
-        word += letter
-    
-        if node.is_word:
-            results.add(word)
+        letter = self.board[r,c].upper()
+        if letter == 'QU':
+            if 'Q' not in node.children:
+                return
+            word += 'Q'
+            node = node.children['Q']
+            if 'U' not in node.children:
+                return
+            word += 'U'
+            node = node.children['U']
+        
+        else:
+            if letter not in node.children:
+                return
+        
+            node = node.children[letter]
+            word += letter
+        
+            if node.is_word:
+                results.add(word)
     
         visited.add((r, c))
     
