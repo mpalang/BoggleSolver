@@ -223,3 +223,61 @@ def canon(img, size=64, margin=0, min_area=0.02):
     oy, ox = (size - g.shape[0])//2, (size - g.shape[1])//2
     out[oy:oy+g.shape[0], ox:ox+g.shape[1]] = g
     return out
+
+
+class WordFinder:
+    def __init__(self, board:np.ndarray[str], trie):
+        self.board = board
+        self.trie = trie
+        self.solve()
+        
+    def solve(self):
+        results = set()
+
+        ROWS,COLS = self.board.shape
+        
+        for r in range(ROWS):
+            for c in range(COLS):
+                self.dfs(r, c, self.trie.root, "", set(), results)
+        
+        results = sorted(results, key=lambda x: (x,len(x)))
+        self.valid_words = results
+        return results
+        
+    def dfs(self,r, c, node, word, visited, results):
+        DIRS = [(-1,-1),(-1,0),(0,-1),(0,1),(1,0),(1,1),(-1,1),(1,-1)]
+        ROWS,COLS = self.board.shape
+        
+        letter = self.board[r,c].upper()
+        if letter == 'QU':
+            if 'Q' not in node.children:
+                return
+            word += 'Q'
+            node = node.children['Q']
+            if 'U' not in node.children:
+                return
+            word += 'U'
+            node = node.children['U']
+        
+        else:
+            if letter not in node.children:
+                return
+        
+            node = node.children[letter]
+            word += letter
+        
+            if node.is_word:
+                results.add(word)
+    
+        visited.add((r, c))
+    
+        for dr, dc in DIRS:
+            nr, nc = r + dr, c + dc
+    
+            if (0 <= nr < ROWS and
+                0 <= nc < COLS and
+                (nr, nc) not in visited):
+    
+                self.dfs(nr, nc, node, word, visited, results)
+    
+        visited.remove((r, c))

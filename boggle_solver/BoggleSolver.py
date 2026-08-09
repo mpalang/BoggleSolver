@@ -2,75 +2,21 @@ import cv2
 import numpy as np
 from pathlib import Path
 from matplotlib import pyplot as plt
-from board_recognizing.auxiliary import (show,order_points,warp,resize_image,
-                       make_bw,rotate_image,load_templates,
-                       approx_quad,canon,
-                       timer)
-from utils import load_trie
+from boggle_solver.utils import (order_points,warp,
+                       rotate_image,load_templates,
+                       canon, make_bw,
+                       WordFinder)
+from Dictionary.utils import load_trie
 
 
 def K(n: int):
+    """Creates Kernel of size n. Keep it uneven no shifting happens."""
     if n%2==0:
         raise ValueError('kernel size needs to be uneven')
     cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (n, n))
     
+
 class BoggleSolver:
-    def __init__(self,board):
-        self.board = board
-        
-    def solve(self,trie):
-        results = set()
-
-        ROWS,COLS = self.board.shape
-        
-        for r in range(ROWS):
-            for c in range(COLS):
-                self.dfs(r, c, trie.root, "", set(), results)
-        
-        results = sorted(results, key=lambda x: (x,len(x)))
-        self.valid_words = results
-        return results
-        
-    def dfs(self,r, c, node, word, visited, results):
-        DIRS = [(-1,-1),(-1,0),(0,-1),(0,1),(1,0),(1,1),(-1,1),(1,-1)]
-        ROWS,COLS = self.board.shape
-        
-        letter = self.board[r,c].upper()
-        if letter == 'QU':
-            if 'Q' not in node.children:
-                return
-            word += 'Q'
-            node = node.children['Q']
-            if 'U' not in node.children:
-                return
-            word += 'U'
-            node = node.children['U']
-        
-        else:
-            if letter not in node.children:
-                return
-        
-            node = node.children[letter]
-            word += letter
-        
-            if node.is_word:
-                results.add(word)
-    
-        visited.add((r, c))
-    
-        for dr, dc in DIRS:
-            nr, nc = r + dr, c + dc
-    
-            if (0 <= nr < ROWS and
-                0 <= nc < COLS and
-                (nr, nc) not in visited):
-    
-                self.dfs(nr, nc, node, word, visited, results)
-    
-        visited.remove((r, c))
-
-
-class BoggleReader:
     def __init__(self, source: str | Path | np.ndarray | None = None, auto_solve=True):
         self.raw_img = None
         self.img = None
@@ -96,7 +42,6 @@ class BoggleReader:
 
     def load_image(self,path):
         self.raw_img = cv2.imread(path)
-        self.normalize_img()
 
     
     def normalize_img(self, long_edge=1200):
@@ -106,50 +51,75 @@ class BoggleReader:
 
 
     def get_board(self, out=512, inset=0.94, blur = False, debug = True):
+
+        #Blur to get rid of noise
         if blur:
-            img = cv2.GaussianBlur(self.img, (5, 5), 0)
+            img = cv2.GaussianBlur(self.img, K(5), 0)
         else:
             img = self.img
+
+        #Get orange mask for board recognition:
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         orange = cv2.inRange(hsv, (10, 100, 90), (40, 255, 255))
-
         mask = cv2.morphologyEx(orange, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8))
 
+        #Find outer contours of blobs
         cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not cnts:
             print('None found')
             return None
-        cnt = max(cnts, key=cv2.contourArea)
 
+        #Pick blob with largest area (presumably the boggle board)
+        cnt = max(cnts, key=cv2.contourArea)
         box = cv2.boxPoints(cv2.minAreaRect(cnt)).astype(np.float32)
-        raw = box.copy()
         box = order_points(box)
         c = box.mean(axis=0)
         box = (c + inset * (box - c)).astype(np.float32)
 
+        #Cut and warp to board
         self.board = warp(self.img, box, out)
+
+        return self.board
     
 
     def find_dice(self):
-        hsv = cv2.cvtColor(cv2.GaussianBlur(self.board, (5,5), 0), cv2.COLOR_BGR2HSV)
+        """Detect dice in board."""
+        board = self.board
+        # board = cv2.GaussianBlur(board, K(5), 0)
+        #Get orange mask:
+        hsv = cv2.cvtColor(board, cv2.COLOR_BGR2HSV)
         orange = cv2.inRange(hsv, (5, 100, 90), (70, 255, 255))
+        #Get rid of small holes:
         orange_morph = cv2.morphologyEx(orange, cv2.MORPH_OPEN, K(5))
         orange_morph = cv2.morphologyEx(orange_morph, cv2.MORPH_CLOSE, K(11))
 
+        #Draw extra lines that strengthen the grid and improve dice separation:
         lines = self.get_lines(orange_morph)
         orange_with_lines = self.draw_lines(orange,lines)
 
+        #Bring dice into foreground:
         mask = cv2.bitwise_not(orange_with_lines)
 
+        #Improve die separation with watershedding:
         d = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
-        _, peaks = cv2.threshold(d, 0.55 * d.max(), 255, cv2.THRESH_BINARY)
-        peaks = peaks.astype(np.uint8)
+        #sweep sensitivity to find exacly 16 die.
+        best = None
+        for f in np.arange(0.30, 0.85, 0.025): 
+            peaks = (d > f * d.max()).astype(np.uint8)
+            n = cv2.connectedComponents(peaks)[0] - 1
+            if best is None or abs(n - 16) < abs(best[1] - 16):
+                best = (peaks, n)
+            if n == 16:
+                break
+        peaks = best[0] * 255                     
 
+        #Now define markers for dice
         nlab, markers = cv2.connectedComponents(peaks)
         markers += 1
         markers[cv2.subtract(mask, peaks) == 255] = 0
         markers = cv2.watershed(cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR), markers)
 
+        #Get Squares of dice:
         squares = []
         for i in range(2, nlab + 1):
             c = cv2.findContours((markers == i).astype(np.uint8),
@@ -177,63 +147,59 @@ class BoggleReader:
             square = ((cx,cy), (a,a), angle)
             squares.append(square)
 
+        #Order dice:
         row_tol = 80
         def sort_key(rect):
             (x,y),_,_ = rect
             row = round(y / row_tol)
             return (row, x)
-        
         squares = sorted(squares, key=sort_key) # sort from top left to bottom right
 
+        #Make sure there's actually 16 dice.
+        #TODO: maybe add a second check where the centers have to be approx. on a 4x4 grid?
         if len(squares)!=16:
             raise RuntimeError(f'Number of found dice is not 16: {len(squares)}')
 
+        #Write to class:
         self.dice_squares = squares
         self.dice_boxes = [cv2.boxPoints(square) for square in self.dice_squares]
-
 
 
     def get_lines(self,mask,blur_kernel=5,blur_sigma=0,
                 canny_thresholds=(80,200),
                 rho=5,theta=np.pi/360,threshold=500,):
-
         """ draw straight lines between dice. Takes bw mask."""
         edges = cv2.morphologyEx(mask, cv2.MORPH_GRADIENT, K(3))   # 1-px outlines
         lines = cv2.HoughLines(edges,     
                             rho=rho,
                             theta=theta,
                             threshold=threshold)
-
         return lines
 
 
     def draw_lines(self,input_img,lines, color=255):
+        """draw lines on an image"""
         img = input_img.copy()
         h, w = img.shape[:2]
     
         for line in lines:
             rho, theta = line[0]
-    
             a = np.cos(theta)
             b = np.sin(theta)
-    
             x0 = a * rho
             y0 = b * rho
-    
             # two points far along the line
             scale = max(w, h)
-    
             x1 = int(x0 + scale * (-b))
             y1 = int(y0 + scale * (a))
-    
             x2 = int(x0 - scale * (-b))
             y2 = int(y0 - scale * (a))
-    
             cv2.line(img, (x1, y1), (x2, y2), color, 3)
         return img
 
 
     def draw_dice(self, thickness=2, color=(0, 255, 0)):
+        """draw dice on image"""
         vis = self.board.copy()
         cnts = [np.int32(c) for c in self.dice_boxes]
         cv2.drawContours(vis, cnts, -1, color, thickness)
@@ -241,6 +207,7 @@ class BoggleReader:
 
 
     def cut_dice(self):
+        """cut dice from board for letter recognition"""
         cells = []
         pad = 1.05
         size = 128 #has to match template size
@@ -255,7 +222,7 @@ class BoggleReader:
 
 
     def read_letters(self, use_canon=True):
-        """Reads the letters. Option A: compare to template images. Option B: Build machine learning 
+        """Reads the letters. Option A: compare to template images. TODO: Option B: Build machine learning 
         model that recognizes them regardles of orientation"""
         letters = []
         agreement = []
@@ -289,6 +256,7 @@ class BoggleReader:
 
 
     def read_letter(self,n=0, use_canon=True):
+        """read single die (debug etc...)"""
         img = self.dice[n].copy()
         bw = make_bw(img)
         if use_canon:
@@ -316,8 +284,11 @@ class BoggleReader:
         self.find_dice()
         self.cut_dice()
         self.read_letters()
-        solver = BoggleSolver(self.letters)
-        self.valid_words = solver.solve(self.trie)
+        finder = WordFinder(self.letters, self.trie)
+        
+        min_word_length = 4
+        self.valid_words = [word for word in finder.valid_words if len(word)>=min_word_length]
+        self.valid_words = sorted(self.valid_words, key=lambda w: (len(w), w))
         
         
     
