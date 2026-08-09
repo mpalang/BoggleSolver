@@ -78,61 +78,11 @@ def buildTrie():
         
     print('done')
 
-
-class BoggleSolver:
-    def __init__(self,board):
-        self.board = board
+def load_trie():
+    with open(Path(__file__).parent/"trie.pkl","rb") as f:
+        trie = pickle.load(f)
         
-    def solve(self,trie):
-        results = set()
-
-        ROWS,COLS = self.board.shape
-        
-        for r in range(ROWS):
-            for c in range(COLS):
-                self.dfs(r, c, trie.root, "", set(), results)
-        
-        results = sorted(results, key=lambda x: (x,len(x)))
-        self.valid_words = results
-        return results
-        
-    def dfs(self,r, c, node, word, visited, results):
-        DIRS = [(-1,-1),(-1,0),(0,-1),(0,1),(1,0),(1,1),(-1,1),(1,-1)]
-        ROWS,COLS = self.board.shape
-        
-        letter = self.board[r,c].upper()
-        if letter == 'QU':
-            if 'Q' not in node.children:
-                return
-            word += 'Q'
-            node = node.children['Q']
-            if 'U' not in node.children:
-                return
-            word += 'U'
-            node = node.children['U']
-        
-        else:
-            if letter not in node.children:
-                return
-        
-            node = node.children[letter]
-            word += letter
-        
-            if node.is_word:
-                results.add(word)
-    
-        visited.add((r, c))
-    
-        for dr, dc in DIRS:
-            nr, nc = r + dr, c + dc
-    
-            if (0 <= nr < ROWS and
-                0 <= nc < COLS and
-                (nr, nc) not in visited):
-    
-                self.dfs(nr, nc, node, word, visited, results)
-    
-        visited.remove((r, c))
+    return trie
 
 # if __name__=='__main__':
 #     # buildTrie()
