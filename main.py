@@ -1,40 +1,21 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jun 30 20:48:32 2026
-
-@author: morit
-"""
+from BoggleSolver import BoggleSolver
+from utils.paths import TRAININGSIMAGES as ti
+from recognition.image_processing import show
 import numpy as np
-from pathlib import Path
-import sys
-import pickle
-from Dictionary.utils import Trie,TrieNode,buildTrie,BoggleSolver
-# from BoardRecognizer.Read import read_board,get_board
-# from BoardRecognizer.auxiliary import load_image,load_templates,show
 
-
-trie_file = Path(__file__).parent/'Dictionary'/'trie.pkl'
-if not trie_file.exists():
-    buildTrie()    
-with open(trie_file,'rb') as f:
-    print('load trie')
-    trie = pickle.load(f)    
-
-# paths = list(Path('board_recognizing/TrainingImages').glob('*.jpg'))
-# images = [load_image(path) for path in paths]
-# templates = load_templates()
+img_paths = list(ti.glob('*.jpg'))
+b = BoggleSolver(img_paths[5])
+show(b.draw_dice())
+print(b.valid_words)
 
 #%%
-board = np.array([['T','T','F','R'],
-                  ['E','A','A','H'],
-                  ['H','Qu','R','D'],
-                  ['O','L','E','A']
-                    ])
+# from recognition.letters import read_letter
+# from recognition.image_processing import canon, rotate_image
 
-# board = get_board(images[0]) 
-# board = read_board(board,templates)
-bs = BoggleSolver(board)
-valid_words = bs.solve(trie)
-valid_words = [word for word in bs.solve(trie) if len(word)>=5]
-print(valid_words)
-    
+# result = read_letter(b.dice[0], b.templates)
+
+# #%%
+
+# show(b.dice[9])
+# show(canon(b.dice[9]))
+# show(b.templates['M'])
