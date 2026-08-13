@@ -33,7 +33,7 @@ def draw_lines(input_img, lines, color=255):
     return img
 
 
-def find_dice(board, use_lines = False):
+def find_dice(board, use_lines = False, debug = False):
     """Find dice in board."""
     #Get orange mask:
     hsv = cv2.cvtColor(board, cv2.COLOR_BGR2HSV)
@@ -54,26 +54,34 @@ def find_dice(board, use_lines = False):
     #Improve die separation with watershedding:
     d = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
     
-    #sweep sensitivity to find exacly 16 die.
-    best = None
-    for f in np.arange(0.30, 0.85, 0.025): 
-        peaks = (d > f * d.max()).astype(np.uint8)
-        n = cv2.connectedComponents(peaks)[0] - 1
-        if best is None or abs(n - 16) < abs(best[1] - 16):
-            best = (peaks, n)
-        if n == 16:
-            break
-    peaks = best[0] * 255                     
-
+    #sweep sensitivity to find exacly 16 die.    
+    def find_peaks(distance_transform, sensitivities = (0.25, 0.85, 0.25)):
+        best = (None, 0)
+        for f in np.arange(*sensitivities): 
+            peaks = (distance_transform > f * distance_transform.max()).astype(np.uint8)
+            n = cv2.connectedComponents(peaks)[0] - 1
+            if best[0] is None and abs(16-n)<abs(16-best[1]):
+                best = (peaks,n)
+            if n == 16:
+                break
+        peaks = best[0] * 255    
+        return peaks, best[1]
+    
+    peaks, n = find_peaks(d)
+    if n != 16: #try with more sensitivities if 16 dice are not found.
+        peaks, n = find_peaks(d, sensitivities = (0.25,0.9,0.01))
+    
+    print(n)
+    
     #Now define markers for dice
-    nlab, markers = cv2.connectedComponents(peaks)
-    markers += 1
+    n_blobs, markers_raw = cv2.connectedComponents(peaks)
+    markers = markers_raw + 1
     markers[cv2.subtract(mask, peaks) == 255] = 0
     markers = cv2.watershed(cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR), markers)
-    
+        
     #Get Squares of dice:
     squares = []
-    for i in range(2, nlab + 1):
+    for i in range(2, n_blobs + 1):
         blob = (markers == i).astype(np.uint8) 
         c = cv2.findContours(blob, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
         if not c:
@@ -98,7 +106,12 @@ def find_dice(board, use_lines = False):
         a = (w+h)/2
         square = ((cx,cy), (a,a), angle)
         squares.append(square)
-
+     
+    #Make sure there's actually 16 dice.
+    #TODO: maybe add a second check where the centers have to be approx. on a 4x4 grid?
+    if len(squares)!=16 and not debug:
+        raise RuntimeError(f'Number of found dice is not 16 but {len(squares)}')
+        
     #Order dice:
     row_tol = 80
     def sort_key(rect):
@@ -106,13 +119,36 @@ def find_dice(board, use_lines = False):
         row = round(y / row_tol)
         return (row, x)
     squares = sorted(squares, key=sort_key) # sort from top left to bottom right
+    
+    if debug:
+        return mask, d, peaks, markers_raw, markers
+    else:
+        return squares
 
-    #Make sure there's actually 16 dice.
-    #TODO: maybe add a second check where the centers have to be approx. on a 4x4 grid?
-    if len(squares)!=16:
-        raise RuntimeError(f'Number of found dice is not 16: {len(squares)}')
 
-    return squares
+def debug_watershed(mask, d, peaks, markers_before, markers_after):
+    """4-panel view: distance transform | peaks | marker zones | watershed result."""
+    H, W = mask.shape
+
+    dv = cv2.applyColorMap(
+        cv2.normalize(d, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8),
+        cv2.COLORMAP_JET)
+
+    pv = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+    pv[peaks > 0] = (0, 255, 255)                # seeds, yellow on the mask
+
+    zv = np.zeros((H, W, 3), np.uint8)
+    zv[markers_before == 1] = (60, 60, 60)       # background
+    zv[markers_before == 0] = (0, 0, 255)        # unknown / contested shell
+    zv[markers_before > 1]  = (0, 255, 0)        # seed cores
+
+    rng = np.random.default_rng(0)
+    lut = rng.integers(60, 255, (markers_after.max() + 2, 3), dtype=np.uint8)
+    wv = lut[np.clip(markers_after, 0, None)]
+    wv[markers_after == -1] = (0, 0, 255)        # dams
+    wv[markers_after ==  1] = (0, 0, 0)          # background
+
+    return dv, pv, zv, wv
 
 
 def draw_squares(board, squares, thickness=2, color=(0, 255, 0), numbers = True):
