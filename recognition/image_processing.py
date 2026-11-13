@@ -2,18 +2,32 @@
 from pathlib import Path
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
 
 from utils.paths import TRAININGSIMAGES
 
 
 
 def show(img, title=""):
+    from matplotlib import pyplot as plt
     plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
     plt.title(title)
     plt.axis("off")
     plt.show()
 
+
+def to_jpeg(img, quality=90) -> bytes:
+    """for the web response"""
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        raise ValueError("encode failed")
+    return buf.tobytes()
+
+
+def decode_image(data) -> np.ndarray:
+    img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("could not decode image bytes")
+    return img
 
 def crop_image(img,size=None):
     # This is the template size and shoud therefore not be changed!

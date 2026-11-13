@@ -4,10 +4,6 @@ Created on Tue Jul  7 13:56:01 2026
 
 @author: moritzpalang
 """
-import cv2
-import numpy as np
-from pathlib import Path
-from matplotlib import pyplot as plt
 import sys
 
 

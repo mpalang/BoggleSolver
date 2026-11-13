@@ -1,11 +1,12 @@
 from pathlib import Path
 from numpy import typing as nt
 import numpy as np
-from recognition.image_processing import (load_image, normalize_img)
+from recognition.image_processing import (load_image, normalize_img, decode_image)
 from recognition.board import (get_board)
-from recognition.dice import (find_dice, draw_squares, cut_dice, draw_dice)
+from recognition.dice import (find_dice, cut_dice, draw_dice)
 from recognition.letters import (load_templates, read_letters)
 from solving.WordFinder import WordFinder
+import cv2
 
 MINWORDLENGTH = 4
 
@@ -33,18 +34,34 @@ class BoggleSolver:
     def post_init(self, source, auto_solve=True):
         if source is None:
             return
+
         if isinstance(source, str | Path):
             self.img_path = Path(source)
-            self.load_image()
+            self.raw_img = load_image(self.img_path)
         elif isinstance(source, np.ndarray):
             self.raw_img = source
+        elif isinstance(source, bytes | bytearray | memoryview):
+            self.raw_img = decode_image(source)
         else:
-            raise TypeError(f'unsupported source type:{type(source).__name__}')
+            raise TypeError(f"unsupported source type: {type(source).__name__}")
+
         self.normalize_img()
-        
         if auto_solve:
             self.solve()
 
+    @classmethod
+    def from_path(cls, path: str | Path, **kwargs):
+        return cls(Path(path), **kwargs)
+
+    @classmethod
+    def from_array(cls, img: np.ndarray, **kwargs):
+        return cls(img, **kwargs)
+
+    @classmethod
+    def from_bytes(cls, data: bytes, **kwargs):
+        """Decode raw image bytes (e.g. an HTTP upload)."""
+        return cls(decode_image(data), **kwargs)
+    
     
     def load_image(self):
         self.raw_img = load_image(self.img_path)
@@ -116,6 +133,18 @@ class BoggleSolver:
                         self.templates,
                         )
         return board_with_dice
+
+
+    @property
+    def processed_board(self) -> np.ndarray:
+        return self.draw_dice()
+
+    def as_jpeg(self, img=None, quality=90) -> bytes:
+        img = self.processed_board if img is None else img
+        ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+        if not ok:
+            raise ValueError("JPEG encoding failed")
+        return buf.tobytes()
 
 
     
